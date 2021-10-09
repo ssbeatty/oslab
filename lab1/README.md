@@ -97,7 +97,7 @@ load_setup:
 ok_load_setup:
     ! 跳到 setup 执行。
     ! 要注意：我们没有将 bootsect 移到 0x9000，因此跳转后的段地址应该是 0x7ce0
-    ! 即我们要设置 SETUPSEG=0x07e0 原来是0x9020  + 20
+    ! 即我们要设置 SETUPSEG=0x07e0 = 0x07c0 << 4 + 512 0x07c0原来的地址移动一个扇区，setup.s连着bootsect
     jmpi    0,SETUPSEG
 ```
 
