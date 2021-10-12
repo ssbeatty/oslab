@@ -123,13 +123,15 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
         return -EAGAIN;
     }
 
-    long * krnstack = (long *) (PAGE_SIZE + (long) p);
+    long * krnstack = (long *) (PAGE_SIZE + (long) p); 	//创建内核栈 p 指针加上页面大小就是子进程的内核栈位置
+    // `iret` will pop them out
     *(--krnstack) = ss & 0xffff;
     *(--krnstack) = esp;
     *(--krnstack) = eflags;
     *(--krnstack) = cs & 0xffff;
     *(--krnstack) = eip;
 
+    // `first_return_from_kernel` will pop them out
     *(--krnstack) = ds & 0xffff;
     *(--krnstack) = es & 0xffff;
     *(--krnstack) = fs & 0xffff;
@@ -138,12 +140,13 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
     *(--krnstack) = edi;
     *(--krnstack) = edx;
 
-    *(--krnstack) = first_return_from_kernel;
+    *(--krnstack) = (long)first_return_from_kernel;
 
+    // `ret` will pop them out
     *(--krnstack) = ebp;
     *(--krnstack) = ecx;
     *(--krnstack) = ebx;
-    *(--krnstack) = 0;
+    *(--krnstack) = 0; // 子进程返回0 eax
 
     p->kernelstack = krnstack;
 

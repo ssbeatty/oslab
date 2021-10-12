@@ -101,7 +101,8 @@ void math_state_restore()
  * tasks can run. It can not be killed, and it cannot sleep. The 'state'
  * information in task[0] is never used.
  */
-// TODO why??
+// 定义了一个全局变量，和 current 类似，用来指向那一段 0 号进程的 TSS 内存。
+// 即0号进程的tss，所有进程都共用这个tss，任务切换时不再发生变化。
 struct task_struct *tss= &(init_task.task.tss);
 
 void schedule(void)
@@ -134,7 +135,8 @@ void schedule(void)
             if (!*--p)
                 continue;
             if ((*p)->state == TASK_RUNNING && (*p)->counter > c)
-                c = (*p)->counter, next = i, pnext = *p;
+                c = (*p)->counter, next = i, pnext = *p; // i = NR_TASKS; NR_TASKS是表示任务队列最大数量
+                // pnext是task_struct的指针 指向下个任务的pcb
         }
         if (c) break;
         for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
@@ -144,6 +146,11 @@ void schedule(void)
     }
 
     switch_to(pnext, _LDT(next));
+    // _LDT 是sched.h定义的宏
+    // 计算全局表中第n个任务的LDT段描述符的偏移量
+
+    // 当调用时 会依次将参数2 _LDT(next)、参数1 pnext、返回地址 }压栈。
+    // 当执行switch_to的返回指令ret时，就回弹出schedule()函数的}执行schedule()函数的返回指令}。
 }
 
 int sys_pause(void)

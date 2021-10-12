@@ -45,13 +45,19 @@ EFLAGS		= 0x24
 OLDESP		= 0x28
 OLDSS		= 0x2C
 
+# struct tss_struct {
+#      long	back_link;	/* 16 high bits zero */
+#      long	esp0;
+#      /.../
+#      }
+# 为什么是4，因为前面4位是back_link 上一个pcb的地址
 ESP0 = 4
 KERNEL_STACK = 12
 
 state	= 0		# these are offsets into the task-struct.
 counter	= 4
 priority = 8
-kernelstack = 12
+kernelstack = 12 # 增加了一个变量，后面的要整体后移
 signal	= 16
 sigaction = 20		# MUST be 16 (=len of sigaction)
 blocked = (37*16)
@@ -68,8 +74,10 @@ nr_system_calls = 72
  * Ok, I get parallel printer interrupts while using the floppy for some
  * strange reason. Urgel. Now I just ignore them.
  */
+ // 可以被其他函数调用
 .globl switch_to
 .globl first_return_from_kernel
+
 .globl system_call,sys_fork,timer_interrupt,sys_execve
 .globl hd_interrupt,floppy_interrupt,parallel_interrupt
 .globl device_not_available, coprocessor_error
@@ -147,15 +155,16 @@ switch_to:
 	movl 8(%ebp),%ebx
 	cmpl %ebx,current
 	je 1f
-    movl 8(%ebp),%ebx
-    cmpl %ebx,current
-    je 1f
 # 切换PCB
 # ebx 是从参数中取出来的下一个进程的 PCB 指针
 # 经过这两条指令以后，eax 指向现在的当前进程，ebx 指向下一个进程，全局变量 current 也指向下一个进程。
     movl %ebx,%eax
     xchgl %eax,current
 # TSS中的内核栈指针的重写
+# 虽然不使用 TSS 进行任务切换了，但是 Intel 的这态中断处理机制还要保持，所以仍然需要有一个当前 TSS。
+# 这就是为什么要在sched.c定义一个全局tss line 105
+# ebx本来是指向下一个进程的PCB，执行完指令addl $4096,%ebx后，ebx指向下一个进程的PCB。
+# 为什么偏移量是4096？4096 = 4KB。在linux0.11中，一个进程的内核栈和该进程的PCB段是放在一块大小为4KB的内存段中的，其中该内存段的高地址开始是内核栈，低地址开始是PCB段。
 	movl tss,%ecx
 	addl $4096,%ebx
 	movl %ebx,ESP0(%ecx)
@@ -164,7 +173,7 @@ switch_to:
 	movl 8(%ebp),%ebx
 	movl KERNEL_STACK(%ebx),%esp
 # 切换LDT
-    movl 12(%ebp),%ecx
+    movl 12(%ebp),%ecx  # ebp+12就是第二个参数_LDT(next)
     lldt %cx
     movl $0x17,%ecx
     mov %cx,%fs
