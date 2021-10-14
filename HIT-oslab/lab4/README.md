@@ -36,11 +36,90 @@ switch_to(pnext, _LDT(next));
 ```
 
 3. 实现新的switch_to方法
+
+```asm
+    pushl %ebp
+    movl %esp,%ebp
+```
+这是在干什么？
+[详细说明](https://segmentfault.com/a/1190000007977460)
+
 [详细说明](https://www.cxymm.net/article/qq_42518941/119182097)
 
 4. 修改`fork.c`中copy_process方法
+[详细说明](https://blog.csdn.net/baidu_25130051/article/details/46670345)
 
 去掉tss切换的部分, 通过krnstack切换（本实验的目的）
+
+执行到switch_to的栈的样子
+![](images/q2.png)
+
+也就是说switch_to的ret会执行ret_from_sys_call
+
+```asm
+ret_from_sys_call:
+	movl current,%eax		# task[0] cannot have signals
+	cmpl task,%eax
+	je 3f
+	cmpw $0x0f,CS(%esp)		# was old code segment supervisor ?
+	jne 3f
+	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
+	jne 3f
+	movl signal(%eax),%ebx
+	movl blocked(%eax),%ecx
+	notl %ecx
+	andl %ebx,%ecx
+	bsfl %ecx,%ecx
+	je 3f
+	btrl %ecx,%ebx
+	movl %ebx,signal(%eax)
+	incl %ecx
+	pushl %ecx
+	call do_signal
+	popl %eax
+3:	popl %eax
+	popl %ebx
+	popl %ecx
+	popl %edx
+	pop %fs
+	pop %es
+	pop %ds
+	iret
+```
+然后处理eax,ebx,ecx,edx,fs,es,ds后调用iret返回中断
+
+fork中要实验跟这个栈一样的样子才能完成切换
+![](images/q3.png)
+
+这就是这个栈为什么要构造成这个样子
+```c
+    long * krnstack = (long *) (PAGE_SIZE + (long) p); 	//创建内核栈 p 指针加上页面大小就是子进程的内核栈位置
+    // `iret` will pop them out
+    *(--krnstack) = ss & 0xffff;
+    *(--krnstack) = esp;
+    *(--krnstack) = eflags;
+    *(--krnstack) = cs & 0xffff;
+    *(--krnstack) = eip;
+
+    // `first_return_from_kernel` will pop them out
+    *(--krnstack) = ds & 0xffff;
+    *(--krnstack) = es & 0xffff;
+    *(--krnstack) = fs & 0xffff;
+    *(--krnstack) = gs & 0xffff;
+    *(--krnstack) = esi;
+    *(--krnstack) = edi;
+    *(--krnstack) = edx;
+
+    *(--krnstack) = (long)first_return_from_kernel;
+
+    // `ret` will pop them out
+    *(--krnstack) = ebp;
+    *(--krnstack) = ecx;
+    *(--krnstack) = ebx;
+    *(--krnstack) = 0; // 子进程返回0 eax
+
+    p->kernelstack = krnstack;
+```
 
 5. 实现first_return_from_kernel, 五段论弹回用户态的一段
 [详细说明](https://blog.csdn.net/qq_37857224/article/details/119172255)
