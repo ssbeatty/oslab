@@ -1,89 +1,114 @@
+#define   __LIBRARY__
 #include <unistd.h>
-#include <stdio.h>
+#include <sys/types.h>
 #include <fcntl.h>
-#include <semaphore.h>
-#include <wait.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-const char *FILENAME = "./buffer_file";    /* 消费生产的产品存放的缓冲文件的路径 */
-const int NR_CONSUMERS = 5;                        /* 消费者的数量 */
-const int NR_ITEMS = 500;                          /* 产品的最大量 */
-const int BUFFER_SIZE = 10;                        /* 缓冲区大小，表示可同时存在的产品数量 */
-sem_t *metux, *full, *empty;                    /* 3个信号量 */
-unsigned int item_pro, item_used;                /* 刚生产的产品号；刚消费的产品号 */
-int fi, fo;                                        /* 供生产者写入或消费者读取的缓冲文件的句柄 */
+_syscall2(sem_t*,sem_open,const char *,name,unsigned int,value);
+_syscall1(int,sem_wait,sem_t*,sem);
+_syscall1(int,sem_post,sem_t*,sem);
+_syscall1(int,sem_unlink,const char *,name);
 
+#define NUMBER 520 /*打出数字总数*/
+#define CHILD 5 /*消费者进程数*/
+#define BUFSIZE 10 /*缓冲区大小*/
+
+sem_t   *empty, *full, *mutex;
+int fno; /*文件描述符*/
 
 int main()
 {
-    int pid;
-    int i;
-
-    fi = open(FILENAME, O_CREAT| O_TRUNC| O_WRONLY, 0600);    /* 以只写方式打开文件给生产者写入产品编号 */
-    fo = open(FILENAME, O_TRUNC| O_RDONLY);                   /* 以只读方式打开文件给消费者读出产品编号 */
-
-    metux = sem_open("METUX", O_CREAT, 0666, 1);    /* 互斥信号量，防止生产消费同时进行 */
-    full = sem_open("FULL", O_CREAT, 0666, 0);        /* 产品剩余信号量，大于0则可消费 */
-    empty = sem_open("EMPTY", O_CREAT, 0666, BUFFER_SIZE);    /* 空信号量，它与产品剩余信号量此消彼长，大于0时生产者才能继续生产 */
-
-    item_pro = 0;
-
-    if ((pid = fork()))    /* 父进程用来执行消费者动作 */
+    int  i,j,k;
+    int  data;
+    pid_t p;
+    int  buf_out = 0; /*从缓冲区读取位置*/
+    int  buf_in = 0; /*写入缓冲区位置*/
+    /*打开信号量*/
+    if((mutex = sem_open("carmutex",1)) == SEM_FAILED)
     {
-        printf("pid %d:\tproducer created....\n", pid);
-
-        while (item_pro <= NR_ITEMS)    /* 生产完所需产品 */
+        perror("sem_open() error!\n");
+        return -1;
+    }
+    if((empty = sem_open("carempty",10)) == SEM_FAILED)
+    {
+        perror("sem_open() error!\n");
+        return -1;
+    }
+    if((full = sem_open("carfull",0)) == SEM_FAILED)
+    {
+        perror("sem_open() error!\n");
+        return -1;
+    }
+    fno = open("buffer.dat",O_CREAT|O_RDWR|O_TRUNC,0666);
+    /* 将待读取位置存入buffer后,以便 子进程 之间通信 */
+    lseek(fno,10*sizeof(int),SEEK_SET);
+    write(fno,(char *)&buf_out,sizeof(int));
+    /*生产者进程*/
+    if((p=fork())==0)
+    {
+        for( i = 0 ; i < NUMBER; i++)
         {
             sem_wait(empty);
-            sem_wait(metux);
+            sem_wait(mutex);
+            /*写入一个字符*/
+            lseek(fno, buf_in*sizeof(int), SEEK_SET);
+            write(fno,(char *)&i,sizeof(int));
+            buf_in = ( buf_in + 1)% BUFSIZE;
 
-            if(!(item_pro % BUFFER_SIZE))
-                lseek(fi, 0, 0);
-
-            write(fi, (char *) &item_pro, sizeof(item_pro));        /* 写入产品编号 */
-//            printf("pid %d:\tproduces item %d\n", pid, item_pro);
-            item_pro++;
-
-            sem_post(metux);
-            sem_post(full);        /* 唤醒消费者进程 */
+            sem_post(mutex);
+            sem_post(full);
         }
-    }
-    else    /* 子进程来创建消费者 */
+        return 0;
+    }else if(p < 0)
     {
-        i = NR_CONSUMERS;
-        while(i--)
+        perror("Fail to fork!\n");
+        return -1;
+    }
+
+    for( j = 0; j < CHILD ; j++ )
+    {
+        if((p=fork())==0)
         {
-            if(!(pid=fork()))    /* 创建i个消费者进程 */
+            for( k = 0; k < NUMBER/CHILD; k++ )
             {
-                pid = getpid();
-                printf("pid %d:\tconsumer %d created....\n", pid, NR_CONSUMERS-i);
+                sem_wait(full);
+                sem_wait(mutex);
+                /*获得读取位置*/
+                lseek(fno,10*sizeof(int),SEEK_SET);
+                read(fno,(char *)&buf_out,sizeof(int));
+                /*读取数据*/
+                lseek(fno,buf_out*sizeof(int),SEEK_SET);
+                read(fno,(char *)&data,sizeof(int));
+                /*写入读取位置*/
+                buf_out = (buf_out + 1) % BUFSIZE;
+                lseek(fno,10*sizeof(int),SEEK_SET);
+                write(fno,(char *)&buf_out,sizeof(int));
 
-                while(1)
-                {
-                    sem_wait(full);
-                    sem_wait(metux);
-
-                    /* read()读到文件末尾时返回0，将文件的位置指针重新定位到文件首部 */
-                    if(!read(fo, (char *)&item_used, sizeof(item_used)))
-                    {
-                        lseek(fo, 0, 0);
-                        read(fo, (char *)&item_used, sizeof(item_used));
-                    }
-
-                    printf("pid %d:\tconsumer %d consumes item %d\n", pid, NR_CONSUMERS-i, item_used);
-                    sem_post(metux);
-                    sem_post(empty);    /* 唤醒生产者进程 */
-                }
+                sem_post(mutex);
+                sem_post(empty);
+                /*消费资源*/
+                printf("%d:  %d\n",getpid(),data);
+                fflush(stdout);
             }
+            return 0;
+        }else if(p<0)
+        {
+            perror("Fail to fork!\n");
+            return -1;
         }
     }
 
-    i = NR_CONSUMERS + 1;
+    // 等待所有进程退出 否则无法打印全部数字
+    i = CHILD + 1;
     while (i--) {
-        int status;
-        wait(&status);
+        wait(NULL);
     }
-
-    close(fi);
-    close(fo);
+    /*释放信号量*/
+    sem_unlink("carfull");
+    sem_unlink("carempty");
+    sem_unlink("carmutex");
+    /*释放资源*/
+    close(fno);
     return 0;
 }

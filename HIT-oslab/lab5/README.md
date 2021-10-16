@@ -155,6 +155,24 @@ tmp->state=0;
 }
 ```
 
+3. 0.11中实现信号量
+
+添加四个系统调用:
+```c
+extern int sys_sem_open();
+extern int sys_sem_wait();
+extern int sys_sem_post();
+extern int sys_sem_unlink();
+```
+
+具体添加的方法类似实验二，实现在`sem.c`中，结构体定义在`unistd.h`。
+1. 修改`system_call.s`中nr_system_calls系统调用总数。
+2. `sys.h`中增加方法原型。
+3. 实现方法。
+4. 在`unistd.h`中绑定调用号。
+
+同时在0.11下也实现了`pc.c`，详见代码。
+
 ### 问题
 1. 这样有什么问题？
 ```c
