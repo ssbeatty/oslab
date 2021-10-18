@@ -100,10 +100,11 @@ int main()
     }
 
     // 等待所有进程退出 否则无法打印全部数字
-    i = CHILD + 1;
-    while (i--) {
-        wait(NULL);
-    }
+    wait(NULL);
+    wait(NULL);
+    wait(NULL);
+    wait(NULL);
+    wait(NULL);
     /*释放信号量*/
     sem_unlink("carfull");
     sem_unlink("carempty");

@@ -6,31 +6,29 @@
 #include <stdlib.h>
 #include <semaphore.h>
 #include <sys/wait.h>
+#include <sys/shm.h>
+
 #define ALLNUM 550
 #define CUSTOMERNUM 5
 #define BUFFERSIZE 10
-void Producters(FILE *fp);
-void Customer(FILE *fp);
+void Producters(int shmid);
+void Customer(int shmid);
 sem_t *empty,*full,*mutex;
-FILE *fp;
 int Inpos=0;
 int Outpos=0;
 
 int main(int argc, char ** argv)
 {
+    int shmid = shmget(IPC_PRIVATE, BUFFERSIZE, IPC_CREAT|0600);
     pid_t producter;
     pid_t customer;
     empty=sem_open("empty",O_CREAT,0777,10);
     full=sem_open("full",O_CREAT,0777,0);
     mutex=sem_open("mutex",O_CREAT,0777,1);
-    fp=fopen("./products.txt","wb+");
-    fseek(fp,10*sizeof(int),SEEK_SET);
-    fwrite(&Outpos,sizeof(int),1,fp);
-    fflush(fp);
     producter=fork();
     if(producter != 0)
     {
-        Producters(fp);
+        Producters(shmid);
     }
     else
     {
@@ -40,7 +38,7 @@ int main(int argc, char ** argv)
             customer=fork();
             if(customer==0)
             {
-                Customer(fp);
+                Customer(shmid);
                 break;
             }
         }
@@ -53,43 +51,36 @@ int main(int argc, char ** argv)
     sem_unlink("empty");
     sem_unlink("full");
     sem_unlink("mutex");
-    fclose(fp);
     return 0;
 }
 
-void Producters(FILE *fp)
+void Producters(int shmid)
 {
+    int *shmaddr = (int *)shmat(shmid, NULL, 0 );
     int i=0;
     for (i=0;i<ALLNUM;i++)
     {
         sem_wait(empty);
         sem_wait(mutex);
-        fseek( fp, Inpos * sizeof(int), SEEK_SET );
-        fwrite(&i,sizeof(int),1,fp);
-        fflush(fp);
+        shmaddr[Inpos] = i;
         Inpos=(Inpos +1) % BUFFERSIZE;
         sem_post(mutex);
         sem_post(full);
     }
 }
 
-void Customer(FILE *fp)
+void Customer(int shmid)
 {
+    int *shmaddr = (int *)shmat(shmid, NULL, 0 );
     int j,productid;
     for (j=0;j<ALLNUM/CUSTOMERNUM;j++)
     {
         sem_wait(full);
         sem_wait(mutex);
-        fseek(fp,10*sizeof(int),SEEK_SET);
-        fread(&Outpos,sizeof(int),1,fp);
-        fseek(fp,Outpos*sizeof(int),SEEK_SET);
-        fread(&productid,sizeof(int),1,fp);
+        productid = shmaddr[Outpos];
         printf("%d:   %d\n",getpid(),productid);
         fflush(stdout);
         Outpos=(Outpos+1)% BUFFERSIZE;
-        fseek(fp,10*sizeof(int),SEEK_SET);
-        fwrite(&Outpos,sizeof(int),1,fp);
-        fflush(fp);
         sem_post(mutex);
         sem_post(empty);
     }
