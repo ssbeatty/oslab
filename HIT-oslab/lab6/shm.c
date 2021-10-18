@@ -11,7 +11,7 @@ struct struct_shm_tables
 {
     int occupied;
     char name[SHM_NAME_SIZE];
-    long addr;
+    unsigned long addr;
 } shm_tables[SHM_COUNT];
 
 int find_shm_location(char *name)

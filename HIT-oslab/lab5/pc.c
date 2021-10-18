@@ -99,7 +99,8 @@ int main()
         }
     }
 
-    // 等待所有进程退出 否则无法打印全部数字
+    /* 等待所有进程退出 否则无法打印全部数字 */
+    wait(NULL);
     wait(NULL);
     wait(NULL);
     wait(NULL);

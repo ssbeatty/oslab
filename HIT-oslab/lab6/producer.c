@@ -12,51 +12,33 @@ _syscall1(int,sem_unlink,const char *,name);
 _syscall1(void*,shmat,int,shmid);
 _syscall1(int,shmget,char*,name);
 
-#define NUMBER 520 /*打出数字总数*/
-#define BUFSIZE 10 /*缓冲区大小*/
-
-sem_t   *empty, *full, *mutex;
+#define SIZE 10
+#define M 510
 
 int main()
 {
-    int  i,shmid;
+    int shm_id;
+    int count = 0;
     int *p;
-    int  buf_in = 0; /*写入缓冲区位置*/
-    /*打开信号量*/
-    if((mutex = sem_open("carpelamutex",1)) == SEM_FAILED)
-    {
-        perror("sem_open() error!\n");
-        return -1;
+    int curr;
+    sem_t *sem_empty, *sem_full, *sem_shm;
+    sem_empty = sem_open("empty", SIZE);
+    sem_full = sem_open("full", 0);
+    sem_shm = sem_open("shm", 1);
+    shm_id = shmget("buffer");
+    p = (int *)shmat(shm_id);
+    while (count <= M) {
+        sem_wait(sem_empty);
+        sem_wait(sem_shm);
+        curr = count % SIZE;
+        *(p + curr) = count;
+        printf("Producer: %d\n", *(p + curr));
+        fflush(stdout);
+        sem_post(sem_shm);
+        sem_post(sem_full);
+        count++;
     }
-    if((empty = sem_open("carpelaempty",10)) == SEM_FAILED)
-    {
-        perror("sem_open() error!\n");
-        return -1;
-    }
-    if((full = sem_open("carpelafull",0)) == SEM_FAILED)
-    {
-        perror("sem_open() error!\n");
-        return -1;
-    }
-    shmid = shmget("buffer");
-    if(shmid == -1)
-    {
-        return -1;
-    }
-    p = (int*) shmat(shmid);
-    /*生产者进程*/
-    for( i = 0 ; i < NUMBER; i++)
-    {
-        sem_wait(empty);
-        sem_wait(mutex);
-        p[buf_in] = i;
-        buf_in = ( buf_in + 1)% BUFSIZE;
-        sem_post(mutex);
-        sem_post(full);
-    }
-    /*释放信号量*/
-    sem_unlink("carpelafull");
-    sem_unlink("carpelaempty");
-    sem_unlink("carpelamutex");
+    printf("producer end.\n");
+    fflush(stdout);
     return 0;
 }
