@@ -334,3 +334,7 @@ void * sys_shmat(int shmid)
 ```
 
 最后实现`consumer.c`和`producer.c`，这里不知道为神马程序最后老是卡在那里。
+
+
+### 问题
+如果出现`trying to free free page`错误可以把`memory.c`的panic注释掉，这个是因为没有实现shmdt释放页，给mem_map引用减一。

@@ -13,7 +13,7 @@ _syscall1(void*,shmat,int,shmid);
 _syscall1(int,shmget,char*,name);
 
 #define SIZE 10
-#define M 510
+#define M 50
 
 int main()
 {
@@ -40,5 +40,8 @@ int main()
     }
     printf("producer end.\n");
     fflush(stdout);
+    sem_unlink("empty");
+    sem_unlink("full");
+    sem_unlink("shm");
     return 0;
 }
