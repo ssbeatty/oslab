@@ -13,7 +13,7 @@ _syscall1(void*,shmat,int,shmid);
 _syscall1(int,shmget,char*,name);
 
 #define SIZE 10
-#define M 50
+#define M 510
 
 int main()
 {
@@ -40,8 +40,6 @@ int main()
     }
     printf("producer end.\n");
     fflush(stdout);
-    sem_unlink("empty");
-    sem_unlink("full");
-    sem_unlink("shm");
+    /*这里不能释放信号量，消费者还没消费完呢*/
     return 0;
 }

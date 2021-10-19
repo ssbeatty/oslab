@@ -13,7 +13,7 @@ _syscall1(void*,shmat,int,shmid);
 _syscall1(int,shmget,char*,name);
 
 #define SIZE 10
-#define M 50
+#define M 510
 
 int main()
 {
